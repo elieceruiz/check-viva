@@ -28,11 +28,6 @@ def formatear_duracion(inicio, fin):
             inicio = parse(str(inicio))
         if not isinstance(fin, datetime):
             fin = parse(str(fin))
-        # Convertir ambos a misma zona horaria
-        if inicio.tzinfo is None:
-            inicio = CO.localize(inicio)
-        if fin.tzinfo is None:
-            fin = CO.localize(fin)
         duracion = fin - inicio
         dias = duracion.days
         horas, rem = divmod(duracion.seconds, 3600)
@@ -46,10 +41,9 @@ def formatear_duracion(inicio, fin):
 
 def safe_datetime(dt):
     if isinstance(dt, datetime):
-        return dt if dt.tzinfo else CO.localize(dt)
+        return dt
     try:
-        dt_parsed = parse(str(dt))
-        return dt_parsed if dt_parsed.tzinfo else CO.localize(dt_parsed)
+        return parse(str(dt))
     except:
         return datetime.now(CO)
 
@@ -57,6 +51,7 @@ def safe_datetime(dt):
 st.subheader("🟢 Ingreso de vehículo")
 cedula = st.text_input("Número de cédula", max_chars=15)
 
+usuario = None
 if cedula:
     usuario = usuarios.find_one({"cedula": cedula})
     if usuario:
@@ -64,38 +59,37 @@ if cedula:
         st.success(f"Usuario encontrado: {nombre}")
     else:
         nombre = st.text_input("Nombre completo")
-        if nombre:
-            if st.button("Registrar nuevo usuario"):
-                usuarios.insert_one({
-                    "cedula": cedula,
-                    "nombre": nombre,
-                    "fecha_registro": ahora
-                })
-                st.success("✅ Usuario registrado. Ahora puedes registrar el ingreso.")
-                st.rerun()
+        if nombre and st.button("Registrar nuevo usuario"):
+            usuarios.insert_one({
+                "cedula": cedula,
+                "nombre": nombre,
+                "fecha_registro": ahora
+            })
+            st.success("✅ Usuario registrado. Ahora puedes registrar el ingreso.")
+            usuario = {"cedula": cedula, "nombre": nombre}
 
-    if usuario or nombre:
-        with st.form("form_ingreso"):
-            tipo = st.selectbox("Tipo de vehículo", ["Patineta", "Bicicleta"])
-            marca = st.text_input("Marca y referencia", max_chars=50)
-            color = st.text_input("Color o señas distintivas (opcional)", max_chars=50)
-            candado = st.text_input("Candado entregado (opcional)", max_chars=30)
-            submitted = st.form_submit_button("🟢 Registrar ingreso")
+if usuario:
+    with st.form("form_ingreso"):
+        tipo = st.selectbox("Tipo de vehículo", ["Patineta", "Bicicleta"])
+        marca = st.text_input("Marca y referencia", max_chars=50)
+        color = st.text_input("Color o señas distintivas (opcional)", max_chars=50)
+        candado = st.text_input("Candado entregado (opcional)", max_chars=30)
+        submitted = st.form_submit_button("🟢 Registrar ingreso")
 
-            if submitted:
-                ingresos.insert_one({
-                    "cedula": cedula,
-                    "nombre": usuario["nombre"] if usuario else nombre,
-                    "tipo": tipo.lower(),
-                    "marca": marca,
-                    "color": color,
-                    "candado": candado,
-                    "ingreso": ahora,
-                    "salida": None,
-                    "estado": "activo"
-                })
-                st.success("🛴🚲 Ingreso registrado correctamente.")
-                st.rerun()
+        if submitted:
+            ingresos.insert_one({
+                "cedula": cedula,
+                "nombre": usuario["nombre"],
+                "tipo": tipo.lower(),
+                "marca": marca,
+                "color": color,
+                "candado": candado,
+                "ingreso": ahora,
+                "salida": None,
+                "estado": "activo"
+            })
+            st.success("🚲 Ingreso registrado correctamente.")
+            st.rerun()
 
 # === SALIDA ===
 st.subheader("🔴 Registrar salida")
