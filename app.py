@@ -6,8 +6,8 @@ import pandas as pd
 from dateutil.parser import parse
 
 # === CONFIG ===
-st.set_page_config(page_title="🚴️🚲 Check VIVA", layout="centered")
-st.title("🚴️🚲 Registro de Patinetas y Bicicletas – CC VIVA Envigado")
+st.set_page_config(page_title="🛴🚲 Check VIVA", layout="centered")
+st.title("🛴🚲 Registro de Patinetas y Bicicletas – CC VIVA Envigado")
 
 # === CONEXIÓN MONGO ===
 MONGO_URI = st.secrets["mongo_uri"]
@@ -21,7 +21,7 @@ CO = pytz.timezone("America/Bogota")
 ahora = datetime.now(CO)
 orden_tipo = {"patineta": 0, "bicicleta": 1}
 
-# === FUNCIONES AUXILIARES ===
+# === FUNCIONES ===
 def formatear_duracion(inicio, fin):
     try:
         if not isinstance(inicio, datetime):
@@ -93,38 +93,41 @@ if cedula:
 
 # === SALIDA ===
 st.subheader("🔴 Registrar salida")
-cedulas_registradas = [u["cedula"] for u in usuarios.find({}, {"cedula": 1})]
-cedula_salida = st.selectbox("Buscar por cédula para registrar salida", options=cedulas_registradas, key="salida")
+cedulas_registradas = [u["cedula"] for u in usuarios.find({}, {"cedula": 1}) if u.get("cedula")]
 
-if cedula_salida:
-    activo = ingresos.find_one({"cedula": cedula_salida, "estado": "activo"})
-    if activo:
-        st.info(f"Vehículo encontrado: {activo['tipo'].capitalize()} – {activo['marca']}")
-        if st.button("Registrar salida ahora"):
-            try:
-                salida_hora = datetime.now(CO)
-                ingreso_dt = safe_datetime(activo.get("ingreso"))
-                if not isinstance(ingreso_dt, datetime):
-                    raise TypeError("Ingreso no es datetime válido")
+if cedulas_registradas:
+    cedula_salida = st.selectbox("Buscar por cédula para registrar salida", cedulas_registradas, key="salida")
 
-                duracion_str = formatear_duracion(ingreso_dt, salida_hora)
-                duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
+    if cedula_salida:
+        activo = ingresos.find_one({"cedula": cedula_salida, "estado": "activo"})
+        if activo:
+            st.info(f"Vehículo encontrado: {activo['tipo'].capitalize()} – {activo['marca']}")
+            if st.button("Registrar salida ahora"):
+                try:
+                    salida_hora = datetime.now(CO)
+                    ingreso_raw = activo.get("ingreso")
+                    ingreso_dt = safe_datetime(ingreso_raw)
 
-                ingresos.update_one(
-                    {"_id": activo["_id"]},
-                    {"$set": {
-                        "salida": salida_hora,
-                        "estado": "finalizado",
-                        "duracion_min": duracion_min,
-                        "duracion_str": duracion_str
-                    }}
-                )
-                st.success(f"✅ Salida registrada. El vehículo estuvo bajo cuidado durante **{duracion_str}**.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error al calcular duración: {str(e)}")
-    else:
-        st.warning("❌ No hay ingreso activo para esta cédula.")
+                    duracion_str = formatear_duracion(ingreso_dt, salida_hora)
+                    duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
+
+                    ingresos.update_one(
+                        {"_id": activo["_id"]},
+                        {"$set": {
+                            "salida": salida_hora,
+                            "estado": "finalizado",
+                            "duracion_min": duracion_min,
+                            "duracion_str": duracion_str
+                        }}
+                    )
+                    st.success(f"✅ Salida registrada. El vehículo estuvo bajo cuidado durante **{duracion_str}**.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al calcular duración: {str(e)}")
+        else:
+            st.warning("❌ No hay ingreso activo para esta cédula.")
+else:
+    st.info("ℹ️ No hay usuarios registrados aún.")
 
 # === PARQUEADOS ACTUALMENTE ===
 st.subheader("🚧 Vehículos actualmente parqueados")
