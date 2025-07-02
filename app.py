@@ -85,7 +85,9 @@ if cedula:
 
 # === SALIDA ===
 st.subheader("🔴 Registrar salida")
-cedula_salida = st.text_input("Buscar por cédula para registrar salida", key="salida")
+
+cedulas_activas = [r["cedula"] for r in ingresos.find({"estado": "activo"})]
+cedula_salida = st.selectbox("Buscar por cédula para registrar salida", cedulas_activas)
 
 if cedula_salida:
     activo = ingresos.find_one({"cedula": cedula_salida, "estado": "activo"})
