@@ -124,12 +124,14 @@ if parqueados:
     data = []
     for r in parqueados:
         ingreso_dt = r["ingreso"]
+        if not isinstance(ingreso_dt, datetime):
+            ingreso_dt = parse(str(ingreso_dt))
         data.append({
             "Nombre": r["nombre"],
             "Cédula": r["cedula"],
             "Tipo": r["tipo"].capitalize(),
             "Marca": r["marca"],
-            "Ingreso": parse(str(ingreso_dt)).astimezone(CO).strftime("%Y-%m-%d %H:%M"),
+            "Ingreso": ingreso_dt.astimezone(CO).strftime("%Y-%m-%d %H:%M"),
             "Candado": r.get("candado", "")
         })
     st.dataframe(pd.DataFrame(data), use_container_width=True)
@@ -144,8 +146,12 @@ historial.sort(key=lambda x: orden_tipo.get(x["tipo"], 99))
 if historial:
     data = []
     for r in historial:
-        ingreso_dt = parse(str(r["ingreso"]))
-        salida_dt = parse(str(r["salida"]))
+        ingreso_dt = r["ingreso"]
+        salida_dt = r["salida"]
+        if not isinstance(ingreso_dt, datetime):
+            ingreso_dt = parse(str(ingreso_dt))
+        if not isinstance(salida_dt, datetime):
+            salida_dt = parse(str(salida_dt))
         data.append({
             "Nombre": r["nombre"],
             "Cédula": r["cedula"],
