@@ -21,16 +21,23 @@ CO = pytz.timezone("America/Bogota")
 ahora = datetime.now(CO)
 orden_tipo = {"patineta": 0, "bicicleta": 1}
 
-# === FORMATO DURACIÓN ===
+# === FUNCIÓN FORMATO DURACIÓN (robusta) ===
 def formatear_duracion(inicio, fin):
-    duracion = fin - inicio
-    dias = duracion.days
-    horas, rem = divmod(duracion.seconds, 3600)
-    minutos, segundos = divmod(rem, 60)
-    if dias > 0:
-        return f"{dias}d {horas:02d}:{minutos:02d}:{segundos:02d}"
-    else:
-        return f"{horas:02d}:{minutos:02d}:{segundos:02d}"
+    try:
+        if not isinstance(inicio, datetime):
+            inicio = parse(str(inicio))
+        if not isinstance(fin, datetime):
+            fin = parse(str(fin))
+        duracion = fin - inicio
+        dias = duracion.days
+        horas, rem = divmod(duracion.seconds, 3600)
+        minutos, segundos = divmod(rem, 60)
+        if dias > 0:
+            return f"{dias}d {horas:02d}:{minutos:02d}:{segundos:02d}"
+        else:
+            return f"{horas:02d}:{minutos:02d}:{segundos:02d}"
+    except Exception:
+        return "—"
 
 # === INGRESO ===
 st.subheader("🟢 Ingreso de vehículo")
@@ -86,9 +93,9 @@ if cedula_salida:
         st.info(f"Vehículo encontrado: {activo['tipo'].capitalize()} – {activo['marca']}")
         if st.button("Registrar salida ahora"):
             salida_hora = datetime.now(CO)
-            ingreso_dt = activo["ingreso"] if isinstance(activo["ingreso"], datetime) else parse(activo["ingreso"])
+            ingreso_dt = activo["ingreso"]
             duracion_str = formatear_duracion(ingreso_dt, salida_hora)
-            duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
+            duracion_min = int((salida_hora - parse(str(ingreso_dt))).total_seconds() / 60)
 
             ingresos.update_one(
                 {"_id": activo["_id"]},
@@ -112,15 +119,14 @@ parqueados.sort(key=lambda x: orden_tipo.get(x["tipo"], 99))
 if parqueados:
     data = []
     for r in parqueados:
-        ingreso_dt = r["ingreso"] if isinstance(r["ingreso"], datetime) else parse(r["ingreso"])
-        ahora = datetime.now(CO)
-        duracion = formatear_duracion(ingreso_dt, ahora)
+        ingreso_dt = r["ingreso"]
+        duracion = formatear_duracion(ingreso_dt, datetime.now(CO))
         data.append({
             "Nombre": r["nombre"],
             "Cédula": r["cedula"],
             "Tipo": r["tipo"].capitalize(),
             "Marca": r["marca"],
-            "Ingreso": ingreso_dt.astimezone(CO).strftime("%Y-%m-%d %H:%M"),
+            "Ingreso": parse(str(ingreso_dt)).astimezone(CO).strftime("%Y-%m-%d %H:%M"),
             "Duración actual": duracion,
             "Candado": r.get("candado", "")
         })
@@ -136,8 +142,8 @@ historial.sort(key=lambda x: orden_tipo.get(x["tipo"], 99))
 if historial:
     data = []
     for r in historial:
-        ingreso_dt = r["ingreso"] if isinstance(r["ingreso"], datetime) else parse(r["ingreso"])
-        salida_dt = r["salida"] if isinstance(r["salida"], datetime) else parse(r["salida"])
+        ingreso_dt = parse(str(r["ingreso"]))
+        salida_dt = parse(str(r["salida"]))
         data.append({
             "Nombre": r["nombre"],
             "Cédula": r["cedula"],
@@ -145,7 +151,7 @@ if historial:
             "Marca": r["marca"],
             "Ingreso": ingreso_dt.astimezone(CO).strftime("%Y-%m-%d %H:%M"),
             "Salida": salida_dt.astimezone(CO).strftime("%Y-%m-%d %H:%M"),
-            "Duración": r.get("duracion_str", "-"),
+            "Duración": r.get("duracion_str", "—"),
             "Candado": r.get("candado", "")
         })
     st.dataframe(pd.DataFrame(data), use_container_width=True)
