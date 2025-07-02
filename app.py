@@ -50,7 +50,7 @@ if cedula:
                     "fecha_registro": ahora
                 })
                 st.success("✅ Usuario registrado. Ahora puedes registrar el ingreso.")
-                st.experimental_rerun()
+                st.rerun()
 
     if usuario or nombre:
         with st.form("form_ingreso"):
@@ -73,7 +73,7 @@ if cedula:
                     "estado": "activo"
                 })
                 st.success("🚲 Ingreso registrado correctamente.")
-                st.experimental_rerun()
+                st.rerun()
 
 # === SALIDA ===
 st.subheader("🔴 Registrar salida")
