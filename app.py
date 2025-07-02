@@ -88,7 +88,7 @@ if cedula:
                     "salida": None,
                     "estado": "activo"
                 })
-                st.success("🚲 Ingreso registrado correctamente.")
+                st.success("🛴🚲 Ingreso registrado correctamente.")
                 st.rerun()
 
 # === SALIDA ===
@@ -97,37 +97,37 @@ cedulas_registradas = [u["cedula"] for u in usuarios.find({}, {"cedula": 1}) if 
 
 if cedulas_registradas:
     cedula_salida = st.selectbox("Buscar por cédula para registrar salida", cedulas_registradas, key="salida")
-
-    if cedula_salida:
-        activo = ingresos.find_one({"cedula": cedula_salida, "estado": "activo"})
-        if activo:
-            st.info(f"Vehículo encontrado: {activo['tipo'].capitalize()} – {activo['marca']}")
-            if st.button("Registrar salida ahora"):
-                try:
-                    salida_hora = datetime.now(CO)
-                    ingreso_raw = activo.get("ingreso")
-                    ingreso_dt = safe_datetime(ingreso_raw)
-
-                    duracion_str = formatear_duracion(ingreso_dt, salida_hora)
-                    duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
-
-                    ingresos.update_one(
-                        {"_id": activo["_id"]},
-                        {"$set": {
-                            "salida": salida_hora,
-                            "estado": "finalizado",
-                            "duracion_min": duracion_min,
-                            "duracion_str": duracion_str
-                        }}
-                    )
-                    st.success(f"✅ Salida registrada. El vehículo estuvo bajo cuidado durante **{duracion_str}**.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error al calcular duración: {str(e)}")
-        else:
-            st.warning("❌ No hay ingreso activo para esta cédula.")
 else:
-    st.info("ℹ️ No hay usuarios registrados aún.")
+    cedula_salida = st.text_input("Ingresar cédula para registrar salida (sin sugerencias)", key="salida_manual")
+
+if cedula_salida:
+    activo = ingresos.find_one({"cedula": cedula_salida, "estado": "activo"})
+    if activo:
+        st.info(f"Vehículo encontrado: {activo['tipo'].capitalize()} – {activo['marca']}")
+        if st.button("Registrar salida ahora"):
+            try:
+                salida_hora = datetime.now(CO)
+                ingreso_raw = activo.get("ingreso")
+                ingreso_dt = safe_datetime(ingreso_raw)
+
+                duracion_str = formatear_duracion(ingreso_dt, salida_hora)
+                duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
+
+                ingresos.update_one(
+                    {"_id": activo["_id"]},
+                    {"$set": {
+                        "salida": salida_hora,
+                        "estado": "finalizado",
+                        "duracion_min": duracion_min,
+                        "duracion_str": duracion_str
+                    }}
+                )
+                st.success(f"✅ Salida registrada. El vehículo estuvo bajo cuidado durante **{duracion_str}**.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error al calcular duración: {str(e)}")
+    else:
+        st.warning("❌ No hay ingreso activo para esta cédula.")
 
 # === PARQUEADOS ACTUALMENTE ===
 st.subheader("🚧 Vehículos actualmente parqueados")
