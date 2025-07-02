@@ -1,3 +1,6 @@
+
+
+
 from datetime import datetime
 import pytz
 import streamlit as st
@@ -6,8 +9,8 @@ import pandas as pd
 from dateutil.parser import parse
 
 # === CONFIG ===
-st.set_page_config(page_title="🚲 Check VIVA", layout="centered")
-st.title("🚲 Registro de Patinetas y Bicicletas – CC VIVA Envigado")
+st.set_page_config(page_title="🛴🚲 Check VIVA", layout="centered")
+st.title("🛴🚲 Registro de Patinetas y Bicicletas – CC VIVA Envigado")
 
 # === CONEXIÓN MONGO ===
 MONGO_URI = st.secrets["mongo_uri"]
