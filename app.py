@@ -3,6 +3,7 @@ import pytz
 import streamlit as st
 from pymongo import MongoClient
 import pandas as pd
+from dateutil.parser import parse
 
 # === CONFIG ===
 st.set_page_config(page_title="🚲 Check VIVA", layout="centered")
@@ -20,7 +21,7 @@ CO = pytz.timezone("America/Bogota")
 ahora = datetime.now(CO)
 orden_tipo = {"patineta": 0, "bicicleta": 1}
 
-# === FUNCIÓN FORMATO DURACIÓN ===
+# === FORMATO DURACIÓN ===
 def formatear_duracion(inicio, fin):
     duracion = fin - inicio
     dias = duracion.days
@@ -85,8 +86,9 @@ if cedula_salida:
         st.info(f"Vehículo encontrado: {activo['tipo'].capitalize()} – {activo['marca']}")
         if st.button("Registrar salida ahora"):
             salida_hora = datetime.now(CO)
-            duracion_str = formatear_duracion(activo["ingreso"], salida_hora)
-            duracion_min = int((salida_hora - activo["ingreso"]).total_seconds() / 60)
+            ingreso_dt = activo["ingreso"] if isinstance(activo["ingreso"], datetime) else parse(activo["ingreso"])
+            duracion_str = formatear_duracion(ingreso_dt, salida_hora)
+            duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
 
             ingresos.update_one(
                 {"_id": activo["_id"]},
@@ -98,7 +100,7 @@ if cedula_salida:
                 }}
             )
             st.success(f"✅ Salida registrada. El vehículo estuvo bajo cuidado durante **{duracion_str}**.")
-            st.experimental_rerun()
+            st.rerun()
     else:
         st.warning("❌ No hay ingreso activo para esta cédula.")
 
@@ -110,14 +112,15 @@ parqueados.sort(key=lambda x: orden_tipo.get(x["tipo"], 99))
 if parqueados:
     data = []
     for r in parqueados:
+        ingreso_dt = r["ingreso"] if isinstance(r["ingreso"], datetime) else parse(r["ingreso"])
         ahora = datetime.now(CO)
-        duracion = formatear_duracion(r["ingreso"], ahora)
+        duracion = formatear_duracion(ingreso_dt, ahora)
         data.append({
             "Nombre": r["nombre"],
             "Cédula": r["cedula"],
             "Tipo": r["tipo"].capitalize(),
             "Marca": r["marca"],
-            "Ingreso": r["ingreso"].astimezone(CO).strftime("%Y-%m-%d %H:%M"),
+            "Ingreso": ingreso_dt.astimezone(CO).strftime("%Y-%m-%d %H:%M"),
             "Duración actual": duracion,
             "Candado": r.get("candado", "")
         })
@@ -133,13 +136,15 @@ historial.sort(key=lambda x: orden_tipo.get(x["tipo"], 99))
 if historial:
     data = []
     for r in historial:
+        ingreso_dt = r["ingreso"] if isinstance(r["ingreso"], datetime) else parse(r["ingreso"])
+        salida_dt = r["salida"] if isinstance(r["salida"], datetime) else parse(r["salida"])
         data.append({
             "Nombre": r["nombre"],
             "Cédula": r["cedula"],
             "Tipo": r["tipo"].capitalize(),
             "Marca": r["marca"],
-            "Ingreso": r["ingreso"].astimezone(CO).strftime("%Y-%m-%d %H:%M"),
-            "Salida": r["salida"].astimezone(CO).strftime("%Y-%m-%d %H:%M"),
+            "Ingreso": ingreso_dt.astimezone(CO).strftime("%Y-%m-%d %H:%M"),
+            "Salida": salida_dt.astimezone(CO).strftime("%Y-%m-%d %H:%M"),
             "Duración": r.get("duracion_str", "-"),
             "Candado": r.get("candado", "")
         })
