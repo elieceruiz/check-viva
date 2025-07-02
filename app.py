@@ -94,8 +94,10 @@ if cedula_salida:
         if st.button("Registrar salida ahora"):
             salida_hora = datetime.now(CO)
             ingreso_dt = activo["ingreso"]
+            if not isinstance(ingreso_dt, datetime):
+                ingreso_dt = parse(str(ingreso_dt))
             duracion_str = formatear_duracion(ingreso_dt, salida_hora)
-            duracion_min = int((salida_hora - parse(str(ingreso_dt))).total_seconds() / 60)
+            duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
 
             ingresos.update_one(
                 {"_id": activo["_id"]},
@@ -120,14 +122,12 @@ if parqueados:
     data = []
     for r in parqueados:
         ingreso_dt = r["ingreso"]
-        duracion = formatear_duracion(ingreso_dt, datetime.now(CO))
         data.append({
             "Nombre": r["nombre"],
             "Cédula": r["cedula"],
             "Tipo": r["tipo"].capitalize(),
             "Marca": r["marca"],
             "Ingreso": parse(str(ingreso_dt)).astimezone(CO).strftime("%Y-%m-%d %H:%M"),
-            "Duración actual": duracion,
             "Candado": r.get("candado", "")
         })
     st.dataframe(pd.DataFrame(data), use_container_width=True)
