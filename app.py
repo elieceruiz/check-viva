@@ -28,6 +28,11 @@ def formatear_duracion(inicio, fin):
             inicio = parse(str(inicio))
         if not isinstance(fin, datetime):
             fin = parse(str(fin))
+        # Convertir ambos a misma zona horaria
+        if inicio.tzinfo is None:
+            inicio = CO.localize(inicio)
+        if fin.tzinfo is None:
+            fin = CO.localize(fin)
         duracion = fin - inicio
         dias = duracion.days
         horas, rem = divmod(duracion.seconds, 3600)
@@ -41,9 +46,10 @@ def formatear_duracion(inicio, fin):
 
 def safe_datetime(dt):
     if isinstance(dt, datetime):
-        return dt
+        return dt if dt.tzinfo else CO.localize(dt)
     try:
-        return parse(str(dt))
+        dt_parsed = parse(str(dt))
+        return dt_parsed if dt_parsed.tzinfo else CO.localize(dt_parsed)
     except:
         return datetime.now(CO)
 
@@ -107,8 +113,7 @@ if cedula_salida:
         if st.button("Registrar salida ahora"):
             try:
                 salida_hora = datetime.now(CO)
-                ingreso_raw = activo.get("ingreso")
-                ingreso_dt = safe_datetime(ingreso_raw)
+                ingreso_dt = safe_datetime(activo.get("ingreso"))
 
                 duracion_str = formatear_duracion(ingreso_dt, salida_hora)
                 duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
