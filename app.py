@@ -18,16 +18,21 @@ ingresos = db.ingresos
 
 # === ZONA HORARIA ===
 CO = pytz.timezone("America/Bogota")
-ahora = datetime.now(CO)
 orden_tipo = {"patineta": 0, "bicicleta": 1}
 
-# === FUNCIÓN FORMATO DURACIÓN (robusta) ===
+# === UTILIDADES ===
+def safe_datetime(dt):
+    if isinstance(dt, datetime):
+        return dt
+    try:
+        return parse(str(dt))
+    except:
+        return datetime.now(CO)
+
 def formatear_duracion(inicio, fin):
     try:
-        if not isinstance(inicio, datetime):
-            inicio = parse(str(inicio))
-        if not isinstance(fin, datetime):
-            fin = parse(str(fin))
+        inicio = safe_datetime(inicio)
+        fin = safe_datetime(fin)
         duracion = fin - inicio
         dias = duracion.days
         horas, rem = divmod(duracion.seconds, 3600)
@@ -36,7 +41,7 @@ def formatear_duracion(inicio, fin):
             return f"{dias}d {horas:02d}:{minutos:02d}:{segundos:02d}"
         else:
             return f"{horas:02d}:{minutos:02d}:{segundos:02d}"
-    except Exception:
+    except:
         return "—"
 
 # === INGRESO ===
@@ -55,7 +60,7 @@ if cedula:
                 usuarios.insert_one({
                     "cedula": cedula,
                     "nombre": nombre,
-                    "fecha_registro": ahora
+                    "fecha_registro": datetime.now(CO)
                 })
                 st.success("✅ Usuario registrado. Ahora puedes registrar el ingreso.")
                 st.rerun()
@@ -76,7 +81,7 @@ if cedula:
                     "marca": marca,
                     "color": color,
                     "candado": candado,
-                    "ingreso": ahora,
+                    "ingreso": datetime.now(CO),
                     "salida": None,
                     "estado": "activo"
                 })
@@ -87,7 +92,7 @@ if cedula:
 st.subheader("🔴 Registrar salida")
 
 cedulas_activas = [r["cedula"] for r in ingresos.find({"estado": "activo"})]
-cedula_salida = st.selectbox("Buscar por cédula para registrar salida", cedulas_activas)
+cedula_salida = st.selectbox("Buscar por cédula para registrar salida", options=cedulas_activas)
 
 if cedula_salida:
     activo = ingresos.find_one({"cedula": cedula_salida, "estado": "activo"})
@@ -95,9 +100,7 @@ if cedula_salida:
         st.info(f"Vehículo encontrado: {activo['tipo'].capitalize()} – {activo['marca']}")
         if st.button("Registrar salida ahora"):
             salida_hora = datetime.now(CO)
-            ingreso_dt = activo["ingreso"]
-            if not isinstance(ingreso_dt, datetime):
-                ingreso_dt = parse(str(ingreso_dt))
+            ingreso_dt = safe_datetime(activo["ingreso"])
             duracion_str = formatear_duracion(ingreso_dt, salida_hora)
             duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
 
@@ -123,9 +126,7 @@ parqueados.sort(key=lambda x: orden_tipo.get(x["tipo"], 99))
 if parqueados:
     data = []
     for r in parqueados:
-        ingreso_dt = r["ingreso"]
-        if not isinstance(ingreso_dt, datetime):
-            ingreso_dt = parse(str(ingreso_dt))
+        ingreso_dt = safe_datetime(r["ingreso"])
         data.append({
             "Nombre": r["nombre"],
             "Cédula": r["cedula"],
@@ -146,12 +147,8 @@ historial.sort(key=lambda x: orden_tipo.get(x["tipo"], 99))
 if historial:
     data = []
     for r in historial:
-        ingreso_dt = r["ingreso"]
-        salida_dt = r["salida"]
-        if not isinstance(ingreso_dt, datetime):
-            ingreso_dt = parse(str(ingreso_dt))
-        if not isinstance(salida_dt, datetime):
-            salida_dt = parse(str(salida_dt))
+        ingreso_dt = safe_datetime(r["ingreso"])
+        salida_dt = safe_datetime(r["salida"])
         data.append({
             "Nombre": r["nombre"],
             "Cédula": r["cedula"],
