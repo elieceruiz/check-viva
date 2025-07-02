@@ -88,7 +88,7 @@ if usuario:
                 "salida": None,
                 "estado": "activo"
             })
-            st.success("🚲 Ingreso registrado correctamente.")
+            st.success("🛴🚲 Ingreso registrado correctamente.")
             st.rerun()
 
 # === SALIDA ===
