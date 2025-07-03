@@ -50,96 +50,93 @@ def safe_datetime(dt):
 # === INGRESO ===
 st.subheader("🟢 Ingreso de vehículo")
 cedula = st.text_input("Número de cédula", max_chars=15)
-registro_exitoso = False
-registro_info = {}
 
 if cedula:
     usuario = usuarios.find_one({"cedula": cedula})
     nombre = usuario["nombre"] if usuario else st.text_input("Nombre completo")
-    vehiculo_default = usuario.get("vehiculo", {}) if usuario else {}
 
-    if usuario or nombre:
-        with st.form("form_ingreso"):
-            tipo = st.selectbox("Tipo de vehículo", ["Patineta", "Bicicleta"],
-                                index=["patineta", "bicicleta"].index(vehiculo_default.get("tipo", "patineta")))
-            marca = st.text_input("Marca y referencia", value=vehiculo_default.get("marca", ""), max_chars=50)
-            color = st.text_input("Color o señas distintivas (opcional)", value=vehiculo_default.get("color", ""), max_chars=50)
-            candado = st.text_input("Candado entregado (opcional)", value=vehiculo_default.get("candado", ""), max_chars=30)
+    with st.form("form_ingreso"):
+        if usuario and "vehiculo" in usuario:
+            vehiculo = usuario["vehiculo"]
+            tipo_default = vehiculo.get("tipo", "patineta").capitalize()
+            marca_default = vehiculo.get("marca", "")
+            color_default = vehiculo.get("color", "")
+            candado_default = vehiculo.get("candado", "")
+        else:
+            tipo_default = "Patineta"
+            marca_default = ""
+            color_default = ""
+            candado_default = ""
 
-            if usuario:
-                submitted = st.form_submit_button("🟢 Registrar ingreso")
-                if submitted:
-                    ingresos.insert_one({
-                        "cedula": cedula,
-                        "nombre": nombre,
+        tipo = st.selectbox("Tipo de vehículo", ["Patineta", "Bicicleta"], index=["Patineta", "Bicicleta"].index(tipo_default))
+        marca = st.text_input("Marca y referencia", value=marca_default, max_chars=50)
+        color = st.text_input("Color o señas distintivas (opcional)", value=color_default, max_chars=50)
+        candado = st.text_input("Candado entregado (opcional)", value=candado_default, max_chars=30)
+
+        if usuario:
+            submitted = st.form_submit_button("🟢 Registrar ingreso")
+            if submitted:
+                ingresos.insert_one({
+                    "cedula": cedula,
+                    "nombre": nombre,
+                    "tipo": tipo.lower(),
+                    "marca": marca,
+                    "color": color,
+                    "candado": candado,
+                    "ingreso": ahora,
+                    "salida": None,
+                    "estado": "activo"
+                })
+                usuarios.update_one({"cedula": cedula}, {"$set": {
+                    "vehiculo": {
                         "tipo": tipo.lower(),
                         "marca": marca,
                         "color": color,
-                        "candado": candado,
-                        "ingreso": ahora,
-                        "salida": None,
-                        "estado": "activo"
-                    })
-                    usuarios.update_one({"cedula": cedula}, {"$set": {
-                        "vehiculo": {
-                            "tipo": tipo.lower(),
-                            "marca": marca,
-                            "color": color,
-                            "candado": candado
-                        }
-                    }})
-                    st.success("🚲 Ingreso registrado correctamente.")
-                    st.rerun()
-            else:
-                submitted = st.form_submit_button("Registrar nuevo usuario y vehículo")
-                if submitted:
-                    usuarios.insert_one({
-                        "cedula": cedula,
-                        "nombre": nombre,
-                        "fecha_registro": ahora,
-                        "vehiculo": {
-                            "tipo": tipo.lower(),
-                            "marca": marca,
-                            "color": color,
-                            "candado": candado
-                        }
-                    })
-                    ingresos.insert_one({
-                        "cedula": cedula,
-                        "nombre": nombre,
-                        "tipo": tipo.lower(),
-                        "marca": marca,
-                        "color": color,
-                        "candado": candado,
-                        "ingreso": ahora,
-                        "salida": None,
-                        "estado": "activo"
-                    })
-                    st.success("✅ Usuario y vehículo registrados.")
-                    registro_exitoso = True
-                    registro_info = {
-                        "Nombre": nombre,
-                        "Cédula": cedula,
-                        "Tipo": tipo,
-                        "Marca": marca,
-                        "Color": color,
-                        "Candado": candado,
-                        "Ingreso": ahora.strftime("%Y-%m-%d %H:%M")
+                        "candado": candado
                     }
-
-# === CONFIRMACIÓN VISUAL ===
-if registro_exitoso:
-    st.subheader("📋 Resumen del registro")
-    st.table(pd.DataFrame([registro_info]))
+                }})
+                st.success("🚲 Ingreso registrado correctamente.")
+                st.rerun()
+        else:
+            submitted = st.form_submit_button("Registrar nuevo usuario y vehículo")
+            if submitted and nombre:
+                usuarios.insert_one({
+                    "cedula": cedula,
+                    "nombre": nombre,
+                    "fecha_registro": ahora,
+                    "vehiculo": {
+                        "tipo": tipo.lower(),
+                        "marca": marca,
+                        "color": color,
+                        "candado": candado
+                    }
+                })
+                ingresos.insert_one({
+                    "cedula": cedula,
+                    "nombre": nombre,
+                    "tipo": tipo.lower(),
+                    "marca": marca,
+                    "color": color,
+                    "candado": candado,
+                    "ingreso": ahora,
+                    "salida": None,
+                    "estado": "activo"
+                })
+                st.success("✅ Usuario y vehículo registrados.")
+                st.dataframe(pd.DataFrame([{
+                    "Nombre": nombre,
+                    "Cédula": cedula,
+                    "Tipo": tipo,
+                    "Marca": marca,
+                    "Color": color,
+                    "Candado": candado,
+                    "Ingreso": ahora.strftime("%Y-%m-%d %H:%M")
+                }]), use_container_width=True)
+                st.rerun()
 
 # === SALIDA ===
 st.subheader("🔴 Registrar salida")
-cedulas_registradas = [u["cedula"] for u in usuarios.find({}, {"cedula": 1}) if u.get("cedula")]
-
-if cedulas_registradas:
-    cedula_salida = st.selectbox("Buscar por cédula para registrar salida", cedulas_registradas, key="salida")
-else:
-    cedula_salida = st.text_input("Ingresar cédula para registrar salida (sin sugerencias)", key="salida_manual")
+cedula_salida = st.text_input("Ingresar cédula para registrar salida", key="salida_manual")
 
 if cedula_salida:
     activo = ingresos.find_one({"cedula": cedula_salida, "estado": "activo"})
@@ -148,7 +145,8 @@ if cedula_salida:
         if st.button("Registrar salida ahora"):
             try:
                 salida_hora = datetime.now(CO)
-                ingreso_dt = safe_datetime(activo.get("ingreso"))
+                ingreso_dt = safe_datetime(activo.get("ingreso")).astimezone(CO)
+
                 duracion_str = formatear_duracion(ingreso_dt, salida_hora)
                 duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
 
