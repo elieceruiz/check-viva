@@ -18,9 +18,15 @@ zona_col = pytz.timezone("America/Bogota")
 # Función para formatear duración
 def formatear_duracion(inicio, fin):
     if inicio.tzinfo is None:
-        inicio = zona_col.localize(inicio)
+        inicio = inicio.replace(tzinfo=pytz.UTC).astimezone(zona_col)
+    else:
+        inicio = inicio.astimezone(zona_col)
+
     if fin.tzinfo is None:
-        fin = zona_col.localize(fin)
+        fin = fin.replace(tzinfo=pytz.UTC).astimezone(zona_col)
+    else:
+        fin = fin.astimezone(zona_col)
+
     duracion = fin - inicio
     dias = duracion.days
     horas, rem = divmod(duracion.seconds, 3600)
@@ -51,7 +57,7 @@ if cedula_ingreso:
         if st.button("Registrar ingreso"):
             ingreso = {
                 "cedula": cedula_ingreso,
-                "ingreso": datetime.now(zona_col),
+                "ingreso": datetime.utcnow(),  # Se guarda en UTC
                 "salida": None
             }
             col_ingresos.insert_one(ingreso)
@@ -75,7 +81,7 @@ if cedula_ingreso:
                 })
                 col_ingresos.insert_one({
                     "cedula": cedula_ingreso,
-                    "ingreso": datetime.now(zona_col),
+                    "ingreso": datetime.utcnow(),  # UTC
                     "salida": None
                 })
                 st.success("Usuario, vehículo e ingreso registrados exitosamente.")
@@ -90,7 +96,7 @@ if cedula_salida:
     usuario = col_usuarios.find_one({"cedula": cedula_salida})
     vehiculo = col_vehiculos.find_one({"cedula": cedula_salida})
     if ingreso and usuario and vehiculo:
-        salida = datetime.now(zona_col)
+        salida = datetime.utcnow()  # UTC
         duracion = formatear_duracion(ingreso["ingreso"], salida)
         col_ingresos.update_one({"_id": ingreso["_id"]}, {"$set": {"salida": salida}})
         st.success(f"Salida registrada. Duración: {duracion}")
@@ -105,20 +111,20 @@ registros = []
 for r in activos:
     veh = col_vehiculos.find_one({"cedula": r["cedula"]}) or {}
     usu = col_usuarios.find_one({"cedula": r["cedula"]}) or {}
-    tiempo = formatear_duracion(r["ingreso"], datetime.now(zona_col))
+    ingreso_local = r["ingreso"].replace(tzinfo=pytz.UTC).astimezone(zona_col)
+    tiempo = formatear_duracion(r["ingreso"], datetime.utcnow())
     registros.append({
         "nombre": usu.get("nombre", ""),
         "cedula": r["cedula"],
         "tipo": veh.get("tipo", "").capitalize(),
         "marca": veh.get("marca", ""),
-        "ingreso": r["ingreso"],
+        "ingreso": ingreso_local.strftime("%Y-%m-%d %H:%M:%S"),
         "candado": veh.get("candado", ""),
         "tiempo": tiempo
     })
 
 if registros:
     df_activos = pd.DataFrame(registros)
-    df_activos["ingreso"] = pd.to_datetime(df_activos["ingreso"])
     df_activos = df_activos.sort_values(by="ingreso", ascending=False)
     df_activos.index = range(len(df_activos), 0, -1)
     st.dataframe(df_activos[["nombre", "cedula", "tipo", "marca", "ingreso", "candado", "tiempo"]], use_container_width=True)
@@ -132,22 +138,22 @@ historial = []
 for f in finalizados:
     veh = col_vehiculos.find_one({"cedula": f["cedula"]}) or {}
     usu = col_usuarios.find_one({"cedula": f["cedula"]}) or {}
+    ingreso_local = f["ingreso"].replace(tzinfo=pytz.UTC).astimezone(zona_col)
+    salida_local = f["salida"].replace(tzinfo=pytz.UTC).astimezone(zona_col)
     duracion = formatear_duracion(f["ingreso"], f["salida"])
     historial.append({
         "nombre": usu.get("nombre", ""),
         "cedula": f["cedula"],
         "tipo": veh.get("tipo", "").capitalize(),
         "marca": veh.get("marca", ""),
-        "Ingreso": f["ingreso"],
-        "Salida": f["salida"],
+        "Ingreso": ingreso_local.strftime("%Y-%m-%d %H:%M:%S"),
+        "Salida": salida_local.strftime("%Y-%m-%d %H:%M:%S"),
         "duracion": duracion,
         "candado": veh.get("candado", "")
     })
 
 if historial:
     df_finalizados = pd.DataFrame(historial)
-    df_finalizados["Ingreso"] = pd.to_datetime(df_finalizados["Ingreso"])
-    df_finalizados["Salida"] = pd.to_datetime(df_finalizados["Salida"])
     df_finalizados = df_finalizados.sort_values(by="Salida", ascending=False)
     df_finalizados.index = range(len(df_finalizados), 0, -1)
     st.dataframe(df_finalizados[["nombre", "cedula", "tipo", "marca", "Ingreso", "Salida", "duracion", "candado"]], use_container_width=True)
