@@ -133,7 +133,7 @@ else:
 
 # 📜 Últimos ingresos finalizados
 st.subheader("📜 Últimos ingresos finalizados")
-finalizados = list(col_ingresos.find({"salida": {"$ne": None}}).sort("salida", -1).limit(15))
+finalizados = list(col_ingresos.find({"salida": {"$ne": None}}).sort("salida", -1))
 historial = []
 for f in finalizados:
     veh = col_vehiculos.find_one({"cedula": f["cedula"]}) or {}
