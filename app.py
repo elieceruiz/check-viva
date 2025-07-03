@@ -14,8 +14,8 @@ MONGO_URI = st.secrets["mongo_uri"]
 client = MongoClient(MONGO_URI)
 db = client.check_viva
 usuarios = db.usuarios
-ingresos = db.ingresos
 vehiculos = db.vehiculos
+ingresos = db.ingresos
 
 # === ZONA HORARIA ===
 CO = pytz.timezone("America/Bogota")
@@ -57,74 +57,114 @@ if cedula:
     if usuario:
         nombre = usuario["nombre"]
         st.success(f"Usuario encontrado: {nombre}")
-    else:
-        nombre = st.text_input("Nombre completo")
 
-    if usuario or nombre:
-        with st.form("form_ingreso"):
-            tipo = st.selectbox("Tipo de vehículo", ["Patineta", "Bicicleta"])
-            marca = st.text_input("Marca y referencia", max_chars=50)
-            color = st.text_input("Color o señas distintivas (opcional)", max_chars=50)
-            candado = st.text_input("Candado entregado (opcional)", max_chars=30)
-            submitted = st.form_submit_button("🟢 Registrar ingreso")
+        vehiculos_usuario = list(vehiculos.find({"cedula": cedula}))
 
-            if submitted:
-                if not usuario:
-                    usuarios.insert_one({
-                        "cedula": cedula,
-                        "nombre": nombre,
-                        "fecha_registro": ahora
-                    })
+        if vehiculos_usuario:
+            opciones = [f"{v['tipo'].capitalize()} – {v['marca']}" for v in vehiculos_usuario]
+            seleccionado = st.selectbox("Selecciona el vehículo para registrar ingreso:", opciones)
+            idx = opciones.index(seleccionado)
+            vehiculo_sel = vehiculos_usuario[idx]
 
-                vehiculos.update_one(
-                    {"cedula": cedula},
-                    {"$set": {
+            if st.button("🟢 Registrar ingreso con este vehículo"):
+                ingresos.insert_one({
+                    "cedula": cedula,
+                    "nombre": nombre,
+                    "tipo": vehiculo_sel["tipo"],
+                    "marca": vehiculo_sel["marca"],
+                    "color": vehiculo_sel.get("color", ""),
+                    "candado": vehiculo_sel.get("candado", ""),
+                    "ingreso": ahora,
+                    "salida": None,
+                    "estado": "activo"
+                })
+                st.success("✅ Ingreso registrado.")
+                st.rerun()
+
+            st.markdown("---")
+            st.markdown("¿Deseas registrar un **nuevo vehículo** para esta cédula?")
+            with st.form("form_nuevo_vehiculo"):
+                tipo = st.selectbox("Tipo de vehículo", ["Patineta", "Bicicleta"], key="nuevo_tipo_multi")
+                marca = st.text_input("Marca y referencia", max_chars=50, key="nuevo_marca_multi")
+                color = st.text_input("Color o señas distintivas (opcional)", max_chars=50, key="nuevo_color_multi")
+                candado = st.text_input("Candado entregado (opcional)", max_chars=30, key="nuevo_candado_multi")
+                submitted = st.form_submit_button("Registrar nuevo vehículo")
+                if submitted:
+                    vehiculos.insert_one({
                         "cedula": cedula,
                         "tipo": tipo.lower(),
                         "marca": marca,
                         "color": color,
                         "candado": candado,
                         "fecha_registro": ahora
-                    }},
-                    upsert=True
-                )
-
-                ingresos.insert_one({
+                    })
+                    st.success("🚲 Nuevo vehículo guardado correctamente.")
+                    st.rerun()
+        else:
+            st.markdown("### Registrar primer vehículo para esta cédula")
+            with st.form("form_vehiculo_primero"):
+                tipo = st.selectbox("Tipo de vehículo", ["Patineta", "Bicicleta"], key="nuevo_tipo_unico")
+                marca = st.text_input("Marca y referencia", max_chars=50, key="nuevo_marca_unico")
+                color = st.text_input("Color o señas distintivas (opcional)", max_chars=50, key="nuevo_color_unico")
+                candado = st.text_input("Candado entregado (opcional)", max_chars=30, key="nuevo_candado_unico")
+                submitted = st.form_submit_button("Registrar vehículo e ingreso")
+                if submitted:
+                    vehiculos.insert_one({
+                        "cedula": cedula,
+                        "tipo": tipo.lower(),
+                        "marca": marca,
+                        "color": color,
+                        "candado": candado,
+                        "fecha_registro": ahora
+                    })
+                    ingresos.insert_one({
+                        "cedula": cedula,
+                        "nombre": nombre,
+                        "tipo": tipo.lower(),
+                        "marca": marca,
+                        "color": color,
+                        "candado": candado,
+                        "ingreso": ahora,
+                        "salida": None,
+                        "estado": "activo"
+                    })
+                    st.success("✅ Vehículo e ingreso registrados correctamente.")
+                    st.rerun()
+    else:
+        nombre = st.text_input("Nombre completo")
+        if nombre:
+            if st.button("Registrar nuevo usuario"):
+                usuarios.insert_one({
                     "cedula": cedula,
-                    "nombre": nombre if not usuario else usuario["nombre"],
-                    "tipo": tipo.lower(),
-                    "marca": marca,
-                    "color": color,
-                    "candado": candado,
-                    "ingreso": ahora,
-                    "salida": None,
-                    "estado": "activo"
+                    "nombre": nombre,
+                    "fecha_registro": ahora
                 })
-
-                st.success("🚲 Ingreso registrado correctamente.")
+                st.success("✅ Usuario registrado.")
                 st.rerun()
 
 # === SALIDA ===
 st.subheader("🔴 Registrar salida")
-cedulas_registradas = [u["cedula"] for u in usuarios.find({}, {"cedula": 1}) if u.get("cedula")]
+cedula_salida = st.text_input("Buscar cédula para registrar salida", key="salida")
 
-cedula_salida = st.selectbox("Selecciona cédula para registrar salida", cedulas_registradas)
+if cedula_salida:
+    activos = list(ingresos.find({"cedula": cedula_salida, "estado": "activo"}))
+    if activos:
+        if len(activos) == 1:
+            seleccionado = activos[0]
+        else:
+            opciones = [f"{r['tipo'].capitalize()} – {r['marca']}" for r in activos]
+            sel = st.selectbox("Selecciona el vehículo a retirar:", opciones)
+            idx = opciones.index(sel)
+            seleccionado = activos[idx]
 
-activo = ingresos.find_one({"cedula": cedula_salida, "estado": "activo"})
-if activo:
-    tipo = activo.get("tipo", "—").capitalize()
-    marca = activo.get("marca", "—")
-    st.info(f"Vehículo encontrado: {tipo} – {marca}")
-
-    if st.button("Registrar salida ahora"):
-        try:
+        st.info(f"Vehículo encontrado: {seleccionado['tipo'].capitalize()} – {seleccionado['marca']}")
+        if st.button("Registrar salida ahora"):
             salida_hora = datetime.now(CO)
-            ingreso_dt = safe_datetime(activo.get("ingreso"))
+            ingreso_dt = safe_datetime(seleccionado["ingreso"])
             duracion_str = formatear_duracion(ingreso_dt, salida_hora)
             duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
-
             ingresos.update_one(
-                {"_id": activo["_id"]},
+                {"_id": seleccionado["_id"]},
                 {"$set": {
                     "salida": salida_hora,
                     "estado": "finalizado",
@@ -132,28 +172,26 @@ if activo:
                     "duracion_str": duracion_str
                 }}
             )
-            st.success(f"✅ Salida registrada. El vehículo estuvo bajo cuidado durante **{duracion_str}**.")
+            st.success(f"✅ Salida registrada. Tiempo bajo cuidado: {duracion_str}")
             st.rerun()
-        except Exception as e:
-            st.error(f"❌ Error al calcular duración: {str(e)}")
-else:
-    st.warning("❌ No hay ingreso activo para esta cédula.")
+    else:
+        st.warning("❌ No hay ingresos activos para esta cédula.")
 
-# === PARQUEADOS ACTUALMENTE ===
+# === PARQUEADOS ===
 st.subheader("🚧 Vehículos actualmente parqueados")
 parqueados = list(ingresos.find({"estado": "activo"}))
 parqueados.sort(key=lambda x: orden_tipo.get(x.get("tipo", "").lower(), 99))
 
 if parqueados:
     data = []
-    for idx, r in enumerate(parqueados, start=1):
-        ingreso_dt = safe_datetime(r.get("ingreso"))
+    for i, r in enumerate(parqueados, 1):
+        ingreso_dt = safe_datetime(r["ingreso"])
         data.append({
-            "#": idx,
-            "Nombre": r.get("nombre", ""),
-            "Cédula": r.get("cedula", ""),
+            "N°": i,
+            "Nombre": r["nombre"],
+            "Cédula": r["cedula"],
             "Tipo": r.get("tipo", "—").capitalize(),
-            "Marca": r.get("marca", ""),
+            "Marca": r.get("marca", "—"),
             "Ingreso": ingreso_dt.astimezone(CO).strftime("%Y-%m-%d %H:%M"),
             "Candado": r.get("candado", "")
         })
@@ -161,21 +199,22 @@ if parqueados:
 else:
     st.info("No hay vehículos actualmente parqueados.")
 
-# === HISTORIAL DE FINALIZADOS ===
+# === HISTORIAL ===
 st.subheader("📜 Historial de registros finalizados")
 historial = list(ingresos.find({"estado": "finalizado"}).sort("salida", -1).limit(10))
 historial.sort(key=lambda x: orden_tipo.get(x.get("tipo", "").lower(), 99))
 
 if historial:
     data = []
-    for r in historial:
-        ingreso_dt = safe_datetime(r.get("ingreso"))
-        salida_dt = safe_datetime(r.get("salida"))
+    for i, r in enumerate(historial, 1):
+        ingreso_dt = safe_datetime(r["ingreso"])
+        salida_dt = safe_datetime(r["salida"])
         data.append({
-            "Nombre": r.get("nombre", ""),
-            "Cédula": r.get("cedula", ""),
+            "N°": i,
+            "Nombre": r["nombre"],
+            "Cédula": r["cedula"],
             "Tipo": r.get("tipo", "—").capitalize(),
-            "Marca": r.get("marca", ""),
+            "Marca": r.get("marca", "—"),
             "Ingreso": ingreso_dt.astimezone(CO).strftime("%Y-%m-%d %H:%M"),
             "Salida": salida_dt.astimezone(CO).strftime("%Y-%m-%d %H:%M"),
             "Duración": r.get("duracion_str", "—"),
