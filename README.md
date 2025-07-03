@@ -1,10 +1,4 @@
-Claro, Eliecer. Acá tenés el texto corregido y coherente con tu App actual:
-
-
----
-
 🛴🚲 Check VIVA
-
 Registro digital de patinetas y bicicletas en el parqueadero del Centro Comercial VIVA Envigado.
 Diseñada para reemplazar el registro manual en papel, esta App permite controlar ingresos y salidas de vehículos de micromovilidad de forma clara, rápida y segura.
 
