@@ -1,56 +1,43 @@
 import streamlit as st
 from pymongo import MongoClient
 from datetime import datetime
-import pandas as pd
 import pytz
+import pandas as pd
 
-# === CONFIGURACIÓN INICIAL ===
+# === CONFIG ===
 st.set_page_config(page_title="🛴🚲 Check VIVA", layout="centered")
 st.title("🛴🚲 Registro de Patinetas y Bicicletas – CC VIVA Envigado")
-zona_col = pytz.timezone("America/Bogota")
-ahora = datetime.now(zona_col)
 
-# === CONEXIÓN MONGODB ===
+# === CONEXIÓN MONGO ===
 MONGO_URI = st.secrets["mongo_uri"]
 client = MongoClient(MONGO_URI)
 db = client.check_viva
 usuarios = db.usuarios
 vehiculos = db.vehiculos
 
-# === BANDERA DE CÉDULA DESPUÉS DE RERUN ===
-if "cedula_temp" in st.session_state:
-    cedula_ing = st.session_state["cedula_temp"]
-    st.session_state.pop("cedula_temp")
-else:
-    cedula_ing = st.text_input("Número de cédula")
+# === ZONA HORARIA ===
+zona_col = pytz.timezone("America/Bogota")
+ahora = datetime.now(zona_col)
 
-# === BLOQUE DE INGRESO ===
-if cedula_ing:
-    usuario = usuarios.find_one({"cedula": cedula_ing})
+# === INGRESO DE VEHÍCULO ===
+st.subheader("🟢 Ingreso de vehículo")
 
-    if not usuario:
-        nombre = st.text_input("Nombre completo")
-        if nombre and st.button("Registrar nuevo usuario"):
-            usuarios.insert_one({
-                "cedula": cedula_ing,
-                "nombre": nombre,
-                "fecha_registro": ahora
-            })
-            st.session_state["cedula_temp"] = cedula_ing
-            st.success("✅ Usuario registrado correctamente.")
-            st.rerun()
-    else:
-        st.success(f"Usuario encontrado: {usuario['nombre']}")
-        with st.form("form_vehiculo"):
-            tipo = st.selectbox("Tipo de vehículo", ["Patineta", "Bicicleta"])
-            marca = st.text_input("Marca o referencia")
-            color = st.text_input("Color o señas distintivas (opcional)")
-            candado = st.text_input("Candado entregado (opcional)")
-            confirmar = st.form_submit_button("🟢 Registrar ingreso")
+cedula = st.text_input("Número de cédula")
+usuario = usuarios.find_one({"cedula": cedula}) if cedula else None
 
-            if confirmar:
+if usuario:
+    st.success(f"Usuario encontrado: {usuario['nombre']}")
+    with st.form("form_registro_vehiculo"):
+        tipo = st.selectbox("Tipo de vehículo", ["Patineta", "Bicicleta"])
+        marca = st.text_input("Marca o referencia")
+        color = st.text_input("Color o señas distintivas (opcional)")
+        candado = st.text_input("Candado entregado (opcional)")
+        confirmar = st.form_submit_button("🟢 Registrar ingreso")
+
+        if confirmar:
+            if tipo and marca:
                 vehiculos.insert_one({
-                    "cedula": cedula_ing,
+                    "cedula": cedula,
                     "nombre": usuario["nombre"],
                     "tipo": tipo.lower(),
                     "marca": marca,
@@ -59,58 +46,63 @@ if cedula_ing:
                     "ingreso": ahora,
                     "estado": "activo"
                 })
-                st.success("🟢 Vehículo registrado correctamente.")
+                st.success("✅ Ingreso de vehículo registrado.")
                 st.rerun()
+            else:
+                st.warning("Marca y tipo son obligatorios.")
+else:
+    if cedula:
+        nombre = st.text_input("Nombre completo")
+        with st.form("form_nuevo_usuario"):
+            tipo = st.selectbox("Tipo de vehículo", ["Patineta", "Bicicleta"], key="nuevo_tipo")
+            marca = st.text_input("Marca o referencia", key="nuevo_marca")
+            color = st.text_input("Color o señas distintivas (opcional)", key="nuevo_color")
+            candado = st.text_input("Candado entregado (opcional)", key="nuevo_candado")
+            confirmar = st.form_submit_button("🟢 Registrar nuevo usuario y vehículo")
 
-# === SALIDA ===
-st.subheader("🔴 Registrar salida")
-cedula_salida = st.text_input("Número de cédula para salida")
+            if confirmar:
+                if nombre and tipo and marca:
+                    usuarios.insert_one({
+                        "cedula": cedula,
+                        "nombre": nombre,
+                        "fecha_registro": ahora
+                    })
+                    vehiculos.insert_one({
+                        "cedula": cedula,
+                        "nombre": nombre,
+                        "tipo": tipo.lower(),
+                        "marca": marca,
+                        "color": color,
+                        "candado": candado,
+                        "ingreso": ahora,
+                        "estado": "activo"
+                    })
+                    st.success("✅ Usuario y vehículo registrados.")
+                    st.rerun()
+                else:
+                    st.warning("Todos los campos obligatorios deben completarse.")
 
-if cedula_salida:
-    vehiculo_activo = vehiculos.find_one({"cedula": cedula_salida, "estado": "activo"})
-    if vehiculo_activo:
-        salida = datetime.now(zona_col)
-        ingreso = vehiculo_activo["ingreso"]
-        if ingreso.tzinfo is None:
-            ingreso = zona_col.localize(ingreso)
-        duracion = salida - ingreso
-        minutos = int(duracion.total_seconds() / 60)
-        duracion_str = str(duracion).split(".")[0]  # sin microsegundos
-
-        vehiculos.update_one(
-            {"_id": vehiculo_activo["_id"]},
-            {"$set": {
-                "salida": salida,
-                "estado": "finalizado",
-                "duracion_str": duracion_str,
-                "duracion_min": minutos
-            }}
-        )
-        st.success(f"✅ Salida registrada. Duración: {duracion_str}")
-        st.rerun()
-    else:
-        st.warning("❌ No hay vehículo activo registrado con esa cédula.")
-
-# === MOSTRAR REGISTROS ===
+# === VISTA DE PARQUEADOS ACTIVOS ===
 st.subheader("🚧 Vehículos actualmente parqueados")
-activos = list(vehiculos.find({"estado": "activo"}))
+activos = list(vehiculos.find({"estado": "activo"}).sort("ingreso", -1))
+
 if activos:
     df_activos = pd.DataFrame(activos)
     df_activos["Hora ingreso"] = pd.to_datetime(df_activos["ingreso"]).dt.tz_localize("UTC").dt.tz_convert(zona_col).dt.strftime("%Y-%m-%d %H:%M:%S")
-    df_activos = df_activos[["nombre", "cedula", "tipo", "marca", "Hora ingreso", "candado"]]
-    df_activos.columns = ["Nombre", "Cédula", "Tipo", "Marca", "Hora ingreso", "Candado"]
-    st.dataframe(df_activos, use_container_width=True)
+    df_activos.index = range(1, len(df_activos)+1)  # Arranca en 1
+    st.dataframe(df_activos[["nombre", "cedula", "tipo", "marca", "color", "candado", "Hora ingreso"]], use_container_width=True)
 else:
     st.info("No hay vehículos actualmente parqueados.")
 
+# === HISTORIAL DE SALIDAS ===
 st.subheader("📜 Últimos ingresos finalizados")
 finalizados = list(vehiculos.find({"estado": "finalizado"}).sort("salida", -1).limit(10))
+
 if finalizados:
-    df_finalizados = pd.DataFrame(finalizados)
-    df_finalizados["Ingreso"] = pd.to_datetime(df_finalizados["ingreso"]).dt.tz_localize("UTC").dt.tz_convert(zona_col).dt.strftime("%Y-%m-%d %H:%M:%S")
-    df_finalizados["Salida"] = pd.to_datetime(df_finalizados["salida"]).dt.tz_localize("UTC").dt.tz_convert(zona_col).dt.strftime("%Y-%m-%d %H:%M:%S")
-    df_finalizados = df_finalizados[["nombre", "cedula", "tipo", "marca", "Ingreso", "Salida", "duracion_str", "candado"]]
-    df_finalizados.columns = ["Nombre", "Cédula", "Tipo", "Marca", "Ingreso", "Salida", "Duración", "Candado"]
-    st.dataframe(df_finalizados, use_container_width=True)
+    df_final = pd.DataFrame(finalizados)
+    df_final["Ingreso"] = pd.to_datetime(df_final["ingreso"]).dt.tz_localize("UTC").dt.tz_convert(zona_col).dt.strftime("%Y-%m-%d %H:%M")
+    df_final["Salida"] = pd.to_datetime(df_final["salida"]).dt.tz_localize("UTC").dt.tz_convert(zona_col).dt.strftime("%Y-%m-%d %H:%M")
+    df_final.index = range(1, len(df_final)+1)  # Arranca en 1
+    st.dataframe(df_final[["nombre", "cedula", "tipo", "marca", "Ingreso", "Salida", "duracion_str"]], use_container_width=True)
 else:
     st.info("No hay registros finalizados aún.")
