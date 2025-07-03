@@ -164,7 +164,7 @@ if finalizados:
 
     df_finalizados = df_finalizados.sort_values(by="tipo", key=lambda x: x.map(orden_tipo))
     df_finalizados.reset_index(drop=True, inplace=True)
-    df_finalizados.index = df_finalizados.index + 1
+    df_finalizados.index = range(len(df_finalizados), 0, -1)
 
     st.dataframe(df_finalizados[["cedula", "tipo", "marca", "color", "candado", "ingreso", "salida", "duracion_str"]])
 else:
