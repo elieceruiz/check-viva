@@ -1,26 +1,26 @@
 import streamlit as st
+import pandas as pd
 from pymongo import MongoClient
 from datetime import datetime
 from dateutil.parser import parse
 import pytz
-import pandas as pd
 
-# === CONFIGURACIÓN ===
+# Configuración inicial
 st.set_page_config(page_title="🛴🚲 Check VIVA", layout="centered")
 st.title("🛴🚲 Registro de Patinetas y Bicicletas – CC VIVA Envigado")
-
-# === ZONA HORARIA COLOMBIA ===
 zona_col = pytz.timezone("America/Bogota")
 ahora = datetime.now(zona_col)
 
-# === CONEXIÓN A MONGODB ===
+# Conexión a MongoDB
 client = MongoClient(st.secrets["mongo_uri"])
-db = client["check_viva"]
-usuarios = db["usuarios"]
-vehiculos = db["vehiculos"]
-ingresos = db["ingresos"]
+db = client.check_viva
+usuarios = db.usuarios
+vehiculos = db.vehiculos
+ingresos = db.ingresos
 
-# === FUNCIONES UTILITARIAS ===
+orden_tipo = {"patineta": 0, "bicicleta": 1}
+
+# Función duración
 def formatear_duracion(inicio, fin):
     try:
         if not isinstance(inicio, datetime):
@@ -36,15 +36,14 @@ def formatear_duracion(inicio, fin):
         horas, rem = divmod(duracion.seconds, 3600)
         minutos, segundos = divmod(rem, 60)
         if dias > 0:
-            return f"{dias}d {horas:02}:{minutos:02}:{segundos:02}"
-        else:
-            return f"{horas:02}:{minutos:02}:{segundos:02}"
+            return f"{dias}d {horas:02d}:{minutos:02d}:{segundos:02d}"
+        return f"{horas:02d}:{minutos:02d}:{segundos:02d}"
     except Exception:
         return "—"
 
-# === REGISTRO DE INGRESO ===
+# 🟢 Ingreso de vehículo
 st.subheader("🟢 Ingreso de vehículo")
-cedula = st.text_input("Número de cédula")
+cedula = st.text_input("Número de cédula", max_chars=15)
 
 if cedula:
     usuario = usuarios.find_one({"cedula": cedula})
@@ -52,10 +51,9 @@ if cedula:
 
     if usuario and vehiculo:
         st.success("Vehículo registrado previamente.")
-        if st.button("Registrar ingreso ahora"):
+        if st.button("Registrar ingreso"):
             ingresos.insert_one({
                 "cedula": cedula,
-                "nombre": usuario["nombre"],
                 "tipo": vehiculo["tipo"],
                 "marca": vehiculo["marca"],
                 "color": vehiculo.get("color", ""),
@@ -66,83 +64,88 @@ if cedula:
             })
             st.rerun()
     else:
-        nombre = st.text_input("Nombre completo")
-        tipo = st.selectbox("Tipo de vehículo", ["Patineta", "Bicicleta"])
+        nombre = st.text_input("Nombre completo") if not usuario else usuario["nombre"]
+        tipo = st.selectbox("Tipo de vehículo", ["Patineta", "Bicicleta"]).lower()
         marca = st.text_input("Marca o referencia")
-        color = st.text_input("Color o señas distintivas (opcional)")
-        candado = st.text_input("Candado entregado (opcional)", value="No")
-        if nombre and marca and tipo and st.button("Registrar usuario e ingreso"):
-            usuarios.insert_one({"cedula": cedula, "nombre": nombre})
-            vehiculos.insert_one({
-                "cedula": cedula,
-                "tipo": tipo.lower(),
-                "marca": marca,
-                "color": color,
-                "candado": candado
-            })
-            ingresos.insert_one({
-                "cedula": cedula,
-                "nombre": nombre,
-                "tipo": tipo.lower(),
-                "marca": marca,
-                "color": color,
-                "candado": candado,
-                "ingreso": ahora,
-                "salida": None,
-                "estado": "activo"
-            })
-            st.success("Ingreso registrado correctamente.")
-            st.rerun()
+        color = st.text_input("Color o señas distintivas (opcional)", max_chars=50)
+        candado = st.text_input("Candado entregado (opcional)", max_chars=30)
 
-# === REGISTRO DE SALIDA ===
+        if nombre and tipo and marca:
+            if st.button("Registrar nuevo usuario y vehículo"):
+                if not usuario:
+                    usuarios.insert_one({"cedula": cedula, "nombre": nombre})
+                if not vehiculo:
+                    vehiculos.insert_one({
+                        "cedula": cedula,
+                        "tipo": tipo,
+                        "marca": marca,
+                        "color": color,
+                        "candado": candado
+                    })
+                ingresos.insert_one({
+                    "cedula": cedula,
+                    "tipo": tipo,
+                    "marca": marca,
+                    "color": color,
+                    "candado": candado,
+                    "ingreso": ahora,
+                    "salida": None,
+                    "estado": "activo"
+                })
+                st.rerun()
+        elif st.button("Registrar nuevo usuario y vehículo"):
+            st.warning("Por favor completa todos los campos.")
+
+# 🔴 Registrar salida
 st.subheader("🔴 Registrar salida")
-cedula_salida = st.text_input("Número de cédula para salida")
+cedula_salida = st.text_input("Número de cédula para salida", key="salida_cedula")
 
 if cedula_salida:
     vehiculo_activo = ingresos.find_one({"cedula": cedula_salida, "estado": "activo"})
     if vehiculo_activo:
-        if st.button("Registrar salida ahora"):
-            salida_hora = datetime.now(zona_col)
-            ingreso_dt = vehiculo_activo["ingreso"]
-            if ingreso_dt.tzinfo is None:
-                ingreso_dt = zona_col.localize(parse(str(ingreso_dt)))
-            duracion_str = formatear_duracion(ingreso_dt, salida_hora)
-            duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
-            ingresos.update_one(
-                {"_id": vehiculo_activo["_id"]},
-                {"$set": {
-                    "salida": salida_hora,
-                    "estado": "finalizado",
-                    "duracion_min": duracion_min,
-                    "duracion_str": duracion_str
-                }}
-            )
-            st.success(f"Salida registrada. Duración: {duracion_str}")
-            st.rerun()
-    else:
-        st.info("No hay ingreso activo para esta cédula.")
+        salida_hora = datetime.now(zona_col)
+        ingreso_dt = parse(str(vehiculo_activo["ingreso"]))
+        if ingreso_dt.tzinfo is None:
+            ingreso_dt = zona_col.localize(ingreso_dt)
+        duracion_str = formatear_duracion(ingreso_dt, salida_hora)
+        duracion_min = int((salida_hora - ingreso_dt).total_seconds() / 60)
 
-# === PARQUEADOS ACTUALMENTE ===
+        ingresos.update_one(
+            {"_id": vehiculo_activo["_id"]},
+            {"$set": {
+                "salida": salida_hora,
+                "estado": "finalizado",
+                "duracion_str": duracion_str,
+                "duracion_min": duracion_min
+            }}
+        )
+        st.success(f"✅ Salida registrada. Duración: {duracion_str}")
+        st.rerun()
+    else:
+        st.info("No hay ingreso activo para esa cédula.")
+
+# 🚧 Vehículos actualmente parqueados
 st.subheader("🚧 Vehículos actualmente parqueados")
-activos = list(ingresos.find({"estado": "activo"}))
+activos = list(ingresos.find({"estado": "activo"}).sort("ingreso", -1))
+
 if activos:
     df_activos = pd.DataFrame(activos)
     df_activos["Hora ingreso"] = pd.to_datetime(df_activos["ingreso"])
-    df_activos["Hora ingreso"] = df_activos["Hora ingreso"].dt.tz_localize(zona_col, nonexistent='NaT', ambiguous='NaT', errors='coerce').dt.strftime("%Y-%m-%d %H:%M:%S")
-    df_activos.index = range(1, len(df_activos)+1)
-    df_activos = df_activos[["nombre", "cedula", "tipo", "marca", "Hora ingreso", "candado"]]
-    df_activos.rename(columns={
-        "nombre": "Nombre",
-        "cedula": "Cédula",
-        "tipo": "Tipo",
-        "marca": "Marca",
-        "candado": "Candado"
-    }, inplace=True)
-    st.dataframe(df_activos, use_container_width=True)
+
+    if df_activos["Hora ingreso"].dt.tz is None:
+        df_activos["Hora ingreso"] = df_activos["Hora ingreso"].dt.tz_localize(zona_col)
+    else:
+        df_activos["Hora ingreso"] = df_activos["Hora ingreso"].dt.tz_convert(zona_col)
+
+    df_activos["Hora ingreso"] = df_activos["Hora ingreso"].dt.strftime("%Y-%m-%d %H:%M:%S")
+    df_activos = df_activos.sort_values(by="tipo", key=lambda x: x.map(orden_tipo))
+    df_activos.reset_index(drop=True, inplace=True)
+    df_activos.index = df_activos.index + 1
+    st.dataframe(df_activos[["cedula", "tipo", "marca", "color", "candado", "Hora ingreso"]])
 else:
     st.info("No hay vehículos actualmente parqueados.")
 
-# === HISTORIAL FINALIZADOS ===
+# 📜 Últimos ingresos finalizados
 st.subheader("📜 Últimos ingresos finalizados")
 finalizados = list(ingresos.find({"estado": "finalizado"}).sort("salida", -1).limit(10))
 
@@ -150,19 +153,19 @@ if finalizados:
     df_finalizados = pd.DataFrame(finalizados)
     df_finalizados["ingreso"] = pd.to_datetime(df_finalizados["ingreso"])
     df_finalizados["salida"] = pd.to_datetime(df_finalizados["salida"])
-    df_finalizados["ingreso"] = df_finalizados["ingreso"].dt.tz_localize(zona_col, nonexistent='NaT', ambiguous='NaT', errors='coerce').dt.strftime("%Y-%m-%d %H:%M:%S")
-    df_finalizados["salida"] = df_finalizados["salida"].dt.tz_localize(zona_col, nonexistent='NaT', ambiguous='NaT', errors='coerce').dt.strftime("%Y-%m-%d %H:%M:%S")
-    df_finalizados.index = range(1, len(df_finalizados) + 1)
-    df_finalizados = df_finalizados[["nombre", "cedula", "tipo", "marca", "ingreso", "salida", "duracion_str"]]
-    df_finalizados.rename(columns={
-        "nombre": "Nombre",
-        "cedula": "Cédula",
-        "tipo": "Tipo",
-        "marca": "Marca",
-        "ingreso": "Ingreso",
-        "salida": "Salida",
-        "duracion_str": "Duración"
-    }, inplace=True)
-    st.dataframe(df_finalizados, use_container_width=True)
+
+    for col in ["ingreso", "salida"]:
+        if df_finalizados[col].dt.tz is None:
+            df_finalizados[col] = df_finalizados[col].dt.tz_localize(zona_col)
+        else:
+            df_finalizados[col] = df_finalizados[col].dt.tz_convert(zona_col)
+
+        df_finalizados[col] = df_finalizados[col].dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    df_finalizados = df_finalizados.sort_values(by="tipo", key=lambda x: x.map(orden_tipo))
+    df_finalizados.reset_index(drop=True, inplace=True)
+    df_finalizados.index = df_finalizados.index + 1
+
+    st.dataframe(df_finalizados[["cedula", "tipo", "marca", "color", "candado", "ingreso", "salida", "duracion_str"]])
 else:
     st.info("No hay registros finalizados aún.")
