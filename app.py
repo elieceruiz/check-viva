@@ -107,7 +107,7 @@ if cedula_salida:
                 }}
             )
             st.success(f"✅ Salida registrada. Duración: {duracion_str}")
-            st.experimental_rerun()
+            st.rerun()
     else:
         st.warning("No hay ingreso activo para esa cédula.")
 
