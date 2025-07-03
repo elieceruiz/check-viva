@@ -46,7 +46,7 @@ if cedula:
         if nombre and st.button("Registrar nuevo usuario"):
             usuarios.insert_one({"cedula": cedula, "nombre": nombre})
             st.success("✅ Usuario registrado.")
-            st.experimental_rerun()
+            st.rerun()
 
     if usuario or nombre:
         with st.form("form_vehiculo"):
@@ -79,7 +79,7 @@ if cedula:
                     "estado": "activo"
                 })
                 st.success("✅ Ingreso registrado.")
-                st.experimental_rerun()
+                st.rerun()
 
 # === SALIDA DE VEHÍCULO ===
 st.subheader("🔴 Registrar salida")
